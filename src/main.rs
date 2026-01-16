@@ -46,20 +46,26 @@ struct Job {
     output_file: String,
 }
 
-use tren::chunk::{markdown_to_mipcs, mipcs_to_markdown};
+use async_openai::Client;
+use tren::{
+    chunk::{markdown_to_mipcs, mipcs_to_markdown},
+    translate::task,
+};
 
-fn main() -> Result<()> {
+#[tokio::main]
+async fn main() -> Result<()> {
     let filename = "./assets/chinese-text.md";
     let file = std::path::PathBuf::from(filename);
     let content = std::fs::read_to_string(file)?;
 
     let micps = markdown_to_mipcs(&content)?;
 
-    let modified_micps = micps
-        .iter()
-        .map(|micp| micp.replace("。", ""))
-        .collect::<Vec<_>>();
+    // let modified_micps = micps
+    //     .iter()
+    //     .map(|micp| micp.replace("。", ""))
+    //     .collect::<Vec<_>>();
     // let modified_micps = micps.clone();
+    let modified_micps = task(micps).await?;
 
     let modified_markdown = mipcs_to_markdown(&content, modified_micps)?;
 

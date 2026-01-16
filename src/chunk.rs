@@ -2,7 +2,7 @@ use anyhow::{Result, anyhow};
 use pandoc_types::definition::{Inline, *};
 use std::vec::IntoIter;
 
-const TOK_SEP: char = '𐑙';
+pub const TOK_SEP: char = '𐑙';
 
 fn inlines_to_mipc(inlines: Vec<Inline>) -> String {
     fn inlines_to_strings(ins: &Vec<Inline>) -> Vec<String> {

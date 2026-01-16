@@ -8,6 +8,7 @@ repository = "https://git.napatsc.com/ns/tren"
 
 [dependencies]
 anyhow = "1.0.100"
+async-openai = { version = "0.32.3", features = ["chat-completion"] }
 pandoc = "0.8.11"
 pandoc_types = "0.6.0"
 # reqwest = "0.13.1"
