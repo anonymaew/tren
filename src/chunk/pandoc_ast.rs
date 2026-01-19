@@ -1,8 +1,8 @@
+use crate::chunk::{AST, TOK_SEP};
 use anyhow::{Result, anyhow};
 use pandoc_types::definition::{Inline, *};
+use std::path::PathBuf;
 use std::vec::IntoIter;
-
-pub const TOK_SEP: char = '𐑙';
 
 fn inlines_to_mipc(inlines: Vec<Inline>) -> String {
     fn inlines_to_strings(ins: &Vec<Inline>) -> Vec<String> {
@@ -107,56 +107,58 @@ fn apply_mipc_to_block(b_ref: &mut Block, mipc_iter: &mut IntoIter<String>) {
     };
 }
 
-fn markdown_to_ast(markdown: &String) -> Result<Vec<Block>> {
-    let mut pandoc = pandoc::new();
-    pandoc.set_input(pandoc::InputKind::Pipe(markdown.to_string()));
-    pandoc.set_input_format(pandoc::InputFormat::Markdown, vec![]);
-    pandoc.set_output_format(pandoc::OutputFormat::Json, vec![]);
-    pandoc.set_output(pandoc::OutputKind::Pipe);
-
-    let result = pandoc.execute()?;
-    let result_buf = match result {
-        pandoc::PandocOutput::ToBuffer(buf) => Ok(buf),
-        _ => Err(anyhow!("buf not found?")),
-    }?;
-    let ast = serde_json::from_str::<Pandoc>(&result_buf)?;
-    return Ok(ast.blocks);
+#[derive(Clone, Default)]
+pub struct PandocAST {
+    ast: Vec<Block>,
 }
 
-fn ast_to_markdown(blocks: Vec<Block>) -> Result<String> {
-    let pandoc_obj = Pandoc {
-        blocks,
-        meta: std::collections::HashMap::new(),
-    };
-    let mut pandoc = pandoc::new();
-    pandoc.set_input(pandoc::InputKind::Pipe(serde_json::to_string(&pandoc_obj)?));
-    pandoc.set_input_format(pandoc::InputFormat::Json, vec![]);
-    pandoc.set_output_format(pandoc::OutputFormat::Markdown, vec![]);
-    pandoc.set_output(pandoc::OutputKind::Pipe);
+impl AST for PandocAST {
+    fn import(&mut self, filepath: PathBuf) -> Result<()> {
+        let mut pandoc = pandoc::new();
+        pandoc.set_input(pandoc::InputKind::Files(vec![filepath]));
+        pandoc.set_input_format(pandoc::InputFormat::Markdown, vec![]);
+        pandoc.set_output_format(pandoc::OutputFormat::Json, vec![]);
+        pandoc.set_output(pandoc::OutputKind::Pipe);
 
-    let result = pandoc.execute()?;
-    let result_buf = match result {
-        pandoc::PandocOutput::ToBuffer(buf) => Ok(buf),
-        _ => Err(anyhow!("buf not found?")),
-    }?;
-    return Ok(result_buf);
-}
+        let result = pandoc.execute()?;
+        let result_buf = match result {
+            pandoc::PandocOutput::ToBuffer(buf) => Ok(buf),
+            _ => Err(anyhow!("buf not found?")),
+        }?;
+        let ast = serde_json::from_str::<Pandoc>(&result_buf)?;
+        self.ast = ast.blocks;
+        Ok(())
+    }
 
-pub fn markdown_to_mipcs(markdown: &String) -> Result<Vec<String>> {
-    Ok(markdown_to_ast(&markdown)?
-        .iter()
-        .flat_map(collect_ins)
-        .map(inlines_to_mipc)
-        .collect::<Vec<_>>())
-}
+    fn export(&self, filepath: PathBuf) -> Result<()> {
+        let mut pandoc = pandoc::new();
+        pandoc.set_input(pandoc::InputKind::Pipe(serde_json::to_string(&self.ast)?));
+        pandoc.set_input_format(pandoc::InputFormat::Json, vec![]);
+        pandoc.set_output_format(pandoc::OutputFormat::Markdown, vec![]);
+        pandoc.set_output(pandoc::OutputKind::File(filepath));
 
-pub fn mipcs_to_markdown(markdown_ref: &String, mipcs: Vec<String>) -> Result<String> {
-    let mut ast_ref = markdown_to_ast(&markdown_ref)?;
-    let mut mipc_iter = mipcs.into_iter();
+        let result = pandoc.execute()?;
+        match result {
+            pandoc::PandocOutput::ToBuffer(buf) => Ok(buf),
+            _ => Err(anyhow!("buf not found?")),
+        }?;
+        Ok(())
+    }
 
-    ast_ref.iter_mut().for_each(|block| {
-        apply_mipc_to_block(block, &mut mipc_iter);
-    });
+    fn to_mipcs(&self) -> Vec<String> {
+        self.ast
+            .iter()
+            .flat_map(collect_ins)
+            .map(inlines_to_mipc)
+            .collect::<Vec<_>>()
+    }
 
-    ast_to_markdown(ast_ref)
+    fn apply_mipcs(&mut self, mipcs: Vec<String>) -> Result<()> {
+        let mut mipc_iter = mipcs.into_iter();
+
+        self.ast.iter_mut().for_each(|block| {
+            apply_mipc_to_block(block, &mut mipc_iter);
+        });
+        Ok(())
+    }
 }
