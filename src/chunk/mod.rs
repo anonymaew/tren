@@ -1,4 +1,4 @@
-use anyhow::{Result, anyhow};
+use anyhow::Result;
 // use pandoc_types::definition::{Inline, *};
 use std::path::PathBuf;
 
