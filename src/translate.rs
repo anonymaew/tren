@@ -70,25 +70,30 @@ async fn chat(
     }
 }
 
+use crate::cli::Args;
 use futures::{StreamExt, stream};
 
-pub async fn task(src: Vec<String>) -> Result<Vec<String>> {
-    let client = Client::default();
-    let model = "gpt-5-nano".to_string();
+pub async fn task(src: Vec<String>, args: &Args) -> Result<Vec<String>> {
+    let client = Client::new();
     let system_prompt = std::fs::read_to_string(std::path::PathBuf::from("./tren-sys-prompt.txt"))?;
 
-    let processings = stream::iter(src)
-        .map(|mipc| {
+    let mut processings = stream::iter(src)
+        .enumerate()
+        .map(|(i, mipc)| {
             let client = client.clone();
-            let model = model.clone();
+            let model = args.model.clone();
             let system_prompt = system_prompt.clone();
-            async move { chat(&client, &model, &system_prompt, &mipc).await }
+            async move { (i, chat(&client, &model, &system_prompt, &mipc).await) }
         })
-        .buffer_unordered(4)
+        .buffer_unordered(16)
         .collect::<Vec<_>>()
         .await;
 
-    let results = processings.into_iter().collect::<Result<Vec<_>>>()?;
+    processings.sort_by_key(|item| item.0);
+    let results = processings
+        .into_iter()
+        .map(|item| item.1)
+        .collect::<Result<Vec<_>>>()?;
 
     Ok(results)
 }

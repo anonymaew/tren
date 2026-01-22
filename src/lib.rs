@@ -1,2 +1,3 @@
-pub mod chunk;
-pub mod translate;
+mod chunk;
+mod cli;
+mod translate;

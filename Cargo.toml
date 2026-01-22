@@ -9,7 +9,10 @@ repository = "https://git.napatsc.com/ns/tren"
 [dependencies]
 anyhow = "1.0.100"
 async-openai = { version = "0.32.3", features = ["chat-completion"] }
+clap = { version = "4.5.54", features = ["derive"] }
+docx-rust = "0.1.10"
 futures = "0.3.31"
+minijinja = "2.14.0"
 pandoc = "0.8.11"
 pandoc_types = "0.6.0"
 serde = { version = "1.0.228", features = ["derive"] }

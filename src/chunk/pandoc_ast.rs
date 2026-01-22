@@ -2,7 +2,7 @@ use crate::chunk::{AST, TOK_SEP};
 use anyhow::{Result, anyhow};
 use pandoc_types::definition::{Inline, *};
 use serde_json::json;
-use std::path::PathBuf;
+use std::path::Path;
 use std::vec::IntoIter;
 
 fn collect_ins(bs: &Vec<Block>) -> Vec<String> {
@@ -159,9 +159,9 @@ pub struct PandocAST {
 }
 
 impl AST for PandocAST {
-    fn import(&mut self, filepath: PathBuf) -> Result<()> {
+    fn import(&mut self, filepath: &Path) -> Result<()> {
         let mut pandoc = pandoc::new();
-        pandoc.set_input(pandoc::InputKind::Files(vec![filepath]));
+        pandoc.set_input(pandoc::InputKind::Files(vec![filepath.to_path_buf()]));
         pandoc.set_output_format(pandoc::OutputFormat::Json, vec![]);
         pandoc.set_output(pandoc::OutputKind::Pipe);
 
@@ -178,7 +178,7 @@ impl AST for PandocAST {
         Ok(())
     }
 
-    fn export(&self, filepath: PathBuf) -> Result<()> {
+    fn export(&self, filepath: &Path) -> Result<()> {
         let mut pandoc = pandoc::new();
         pandoc.set_input(pandoc::InputKind::Pipe(
             json!({
@@ -190,7 +190,7 @@ impl AST for PandocAST {
         ));
         pandoc.set_input_format(pandoc::InputFormat::Json, vec![]);
         pandoc.set_output_format(pandoc::OutputFormat::Markdown, vec![]);
-        pandoc.set_output(pandoc::OutputKind::File(filepath));
+        pandoc.set_output(pandoc::OutputKind::File(filepath.to_path_buf()));
 
         pandoc.execute()?;
         Ok(())
