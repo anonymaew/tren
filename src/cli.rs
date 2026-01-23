@@ -1,4 +1,6 @@
 use clap::Parser;
+use dotenv;
+use minijinja::render;
 use std::ffi::{OsStr, OsString};
 use std::path::{Path, PathBuf};
 
@@ -32,6 +34,10 @@ struct ArgsCLI {
     /// System prompt for LLM.
     #[arg(long)]
     system: Option<String>,
+
+    /// Maximum parallel request to LLM.
+    #[arg(short = 'j', long, default_value = "1")]
+    parallel: usize,
 }
 
 pub struct Args {
@@ -42,6 +48,7 @@ pub struct Args {
     pub output: PathBuf,
     pub model: String,
     pub system: String,
+    pub parallel: usize,
 }
 
 fn suffix_fallback(
@@ -69,9 +76,9 @@ fn suffix_fallback(
     })
 }
 
-use minijinja::{context, render};
-
 pub fn get_args() -> Args {
+    dotenv::dotenv().ok();
+
     let args_cli = ArgsCLI::parse();
 
     let special_tokens = vec!["𐑣"];
@@ -79,13 +86,6 @@ pub fn get_args() -> Args {
 
 - If there are symbols {{ special_tokens | join(\" , \") }}, keep the symbol intact on the result text in the correct position.
 - Do not give any alternative translation or including any notes or discussion.".to_string();
-
-    // all context is here
-    let ctx = context! {
-        source_language => args_cli.src,
-        target_language => args_cli.tar,
-        special_tokens => special_tokens
-    };
 
     return Args {
         inter_sheet: suffix_fallback(
@@ -103,11 +103,14 @@ pub fn get_args() -> Args {
         system: render!(
             // use arg value or fallback to the hardcode one
             &args_cli.system.clone().unwrap_or(system_prompt),
-            ctx
+            source_language => args_cli.src,
+            target_language => args_cli.tar,
+            special_tokens => special_tokens
         ),
         src: args_cli.src,
         tar: args_cli.tar,
         input: args_cli.input,
         model: args_cli.model,
+        parallel: args_cli.parallel,
     };
 }
