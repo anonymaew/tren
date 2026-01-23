@@ -5,6 +5,9 @@ edition = "2024"
 description = "Customized machine translation pipeline on rich text document using LLM"
 license = "MIT"
 repository = "https://git.napatsc.com/ns/tren"
+authors = [
+	"Napat Srichan <me@napatsc.com>"
+]
 
 [dependencies]
 anyhow = "1.0.100"
