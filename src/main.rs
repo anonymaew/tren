@@ -1,10 +1,10 @@
 mod chunk;
-use crate::chunk::{AST, pandoc_ast::PandocAST};
-use anyhow::Result;
 mod cli;
-use cli::get_args;
 mod translate;
-use translate::task;
+use crate::chunk::{AST, pandoc_ast::PandocAST};
+use crate::cli::get_args;
+use crate::translate::task;
+use anyhow::Result;
 
 #[tokio::main]
 async fn main() -> Result<()> {
