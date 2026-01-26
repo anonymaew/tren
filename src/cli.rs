@@ -1,6 +1,5 @@
 use clap::Parser;
 use dotenv;
-use minijinja::render;
 use std::ffi::{OsStr, OsString};
 use std::path::{Path, PathBuf};
 
@@ -35,11 +34,16 @@ struct ArgsCLI {
     #[arg(long)]
     system: Option<String>,
 
+    /// User prompt for LLM.
+    #[arg(long)]
+    user: Option<String>,
+
     /// Maximum parallel request to LLM.
     #[arg(short = 'j', long, default_value = "1")]
     parallel: usize,
 }
 
+#[derive(Debug, Clone)]
 pub struct Args {
     pub src: String,
     pub tar: String,
@@ -48,6 +52,7 @@ pub struct Args {
     pub output: PathBuf,
     pub model: String,
     pub system: String,
+    pub user: String,
     pub parallel: usize,
 }
 
@@ -81,11 +86,22 @@ pub fn get_args() -> Args {
 
     let args_cli = ArgsCLI::parse();
 
-    let special_tokens = vec!["𐑣"];
-    let system_prompt = "You are an expert translator. Please translate {{ source_language }} into {{ target_language }}. The user will submit sentences or paragraphs; please only translate that portion of text into {{ target_language }}.
+    let system_prompt = "You are an expert translator. Please translate {{ source_language }} into {{ target_language }}. The user will submit sentences or paragraphs with some contexts; please only translate the intended text into {{ target_language }}.
 
 - If there are symbols {{ special_tokens | join(\" , \") }}, keep the symbol intact on the result text in the correct position.
-- Do not give any alternative translation or including any notes or discussion.".to_string();
+- Do not give any alternative translation or including any previous context, notes or discussion.".to_string();
+    let user_prompt = "
+{%- set previous_chunks = previous_chunks[-8:] -%}
+{%- if previous_chunks -%}
+Given the previous context:
+
+{{ previous_chunks | join(\"\\n\\n\") }}
+
+Only translate the following text:
+
+{% endif -%}
+{{ source_text }}"
+        .to_string();
 
     return Args {
         inter_sheet: suffix_fallback(
@@ -100,13 +116,8 @@ pub fn get_args() -> Args {
             "-translated".to_string(),
             None,
         ),
-        system: render!(
-            // use arg value or fallback to the hardcode one
-            &args_cli.system.clone().unwrap_or(system_prompt),
-            source_language => args_cli.src,
-            target_language => args_cli.tar,
-            special_tokens => special_tokens
-        ),
+        system: args_cli.system.clone().unwrap_or(system_prompt),
+        user: args_cli.user.clone().unwrap_or(user_prompt),
         src: args_cli.src,
         tar: args_cli.tar,
         input: args_cli.input,
