@@ -1,68 +1,77 @@
-use crate::chunk::{AST, TOK_SEP};
+use crate::chunk::{AST, TOK_SEP, TaskType, Tasks};
 use anyhow::{Result, anyhow};
 use pandoc_types::definition::{Inline, *};
 use serde_json::json;
 use std::path::Path;
 use std::vec::IntoIter;
 
-fn collect_ins(bs: &Vec<Block>) -> Vec<String> {
-    bs.iter()
-        .filter_map(|b| match b {
-            Block::Plain(ins) | Block::Para(ins) | Block::Header(_, _, ins) => {
-                fn inlines_to_strings(ins: &Vec<Inline>) -> Vec<String> {
-                    ins.iter()
-                        .flat_map(|inline| match inline {
-                            Inline::Str(str) | Inline::RawInline(_, str) => vec![str.clone()],
-                            Inline::Code(_, _)
-                            | Inline::Space
-                            | Inline::SoftBreak
-                            | Inline::LineBreak
-                            | Inline::Math(_, _)
-                            | Inline::Note(_) => vec![],
-                            Inline::Cite(_, _ins) => todo!(),
-                            Inline::Span(_, ins)
-                            | Inline::Link(_, ins, _)
-                            | Inline::Image(_, ins, _)
-                            | Inline::Emph(ins)
-                            | Inline::Strong(ins)
-                            | Inline::Underline(ins)
-                            | Inline::Strikeout(ins)
-                            | Inline::Superscript(ins)
-                            | Inline::Subscript(ins)
-                            | Inline::SmallCaps(ins)
-                            | Inline::Quoted(_, ins) => inlines_to_strings(ins),
-                        })
-                        .collect()
-                }
-
-                Some(vec![inlines_to_strings(ins).join(&TOK_SEP.to_string())])
+fn collect_ins(bs: &Vec<Block>, tasks: &mut Tasks, mode: &Option<TaskType>) {
+    bs.iter().for_each(|b| match b {
+        Block::Plain(ins) | Block::Para(ins) | Block::Header(_, _, ins) => {
+            fn inlines_to_strings(ins: &Vec<Inline>, tasks: &mut Tasks) -> Vec<String> {
+                ins.iter()
+                    .flat_map(|inline| match inline {
+                        Inline::Str(str) | Inline::RawInline(_, str) => {
+                            vec![str.clone()]
+                        }
+                        Inline::Code(_, _)
+                        | Inline::Space
+                        | Inline::SoftBreak
+                        | Inline::LineBreak
+                        | Inline::Math(_, _) => vec![],
+                        Inline::Note(bs) => {
+                            collect_ins(bs, tasks, &Some(TaskType::Side));
+                            vec![]
+                        }
+                        Inline::Cite(_, _ins) => todo!(),
+                        Inline::Span(_, ins)
+                        | Inline::Link(_, ins, _)
+                        | Inline::Image(_, ins, _)
+                        | Inline::Emph(ins)
+                        | Inline::Strong(ins)
+                        | Inline::Underline(ins)
+                        | Inline::Strikeout(ins)
+                        | Inline::Superscript(ins)
+                        | Inline::Subscript(ins)
+                        | Inline::SmallCaps(ins)
+                        | Inline::Quoted(_, ins) => inlines_to_strings(ins, tasks),
+                    })
+                    .collect()
             }
-            Block::LineBlock(_inss) => todo!(),
-            Block::CodeBlock(_, _) => None,
-            Block::RawBlock(_format, _text) => None,
-            Block::BlockQuote(bs) | Block::Div(_, bs) => Some(collect_ins(bs)),
-            Block::OrderedList(_, _bss) => todo!(),
-            Block::BulletList(_bss) => todo!(),
-            Block::DefinitionList(_terms) => todo!(),
-            Block::HorizontalRule | Block::Null => None,
-            Block::Table(_) => todo!(),
-            Block::Figure(_, _cap, _bs) => todo!(),
-        })
-        .flatten()
-        .collect::<Vec<_>>()
+
+            let mipc = inlines_to_strings(ins, tasks).join(&TOK_SEP.to_string());
+            tasks.add(mipc, mode.clone().unwrap_or(TaskType::Main))
+        }
+        Block::LineBlock(_inss) => todo!(),
+        Block::CodeBlock(_, _) => (),
+        Block::RawBlock(_format, _text) => (),
+        Block::BlockQuote(bs) | Block::Div(_, bs) => collect_ins(bs, tasks, mode),
+        Block::OrderedList(_, _bss) => todo!(),
+        Block::BulletList(_bss) => todo!(),
+        Block::DefinitionList(_terms) => todo!(),
+        Block::HorizontalRule | Block::Null => (),
+        Block::Table(_) => todo!(),
+        Block::Figure(_, _cap, _bs) => todo!(),
+    });
 }
 
-fn apply_mipc_to_blocks(bs_ref: &mut Vec<Block>, mipc_iter: &mut IntoIter<String>) {
+fn apply_mipc_to_blocks(bs_ref: &mut Vec<Block>, mipcs: &mut Tasks, mode: &Option<TaskType>) {
     bs_ref.iter_mut().for_each(|b_ref| match b_ref {
         Block::Plain(ins) | Block::Para(ins) | Block::Header(_, _, ins) => {
-            let strings = mipc_iter
-                .next()
-                .expect("mismatch")
+            let strings = mipcs
+                .collect(mode.clone().unwrap_or(TaskType::Main))
+                // .next()
+                // .expect("mismatch")
                 .split(TOK_SEP)
                 .map(|s| s.to_string())
                 .collect::<Vec<_>>();
 
-            fn strings_to_inlines(inlines: &mut Vec<Inline>, str_iter: &mut IntoIter<String>) {
+            fn strings_to_inlines(
+                inlines: &mut Vec<Inline>,
+                mipcs: &mut Tasks,
+                str_iter: &mut IntoIter<String>,
+                mode: &Option<TaskType>,
+            ) {
                 inlines.iter_mut().for_each(|inline| match inline {
                     Inline::Str(i) | Inline::RawInline(_, i) => {
                         *i = str_iter.next().expect("mismatch");
@@ -71,8 +80,8 @@ fn apply_mipc_to_blocks(bs_ref: &mut Vec<Block>, mipc_iter: &mut IntoIter<String
                     | Inline::Space
                     | Inline::SoftBreak
                     | Inline::LineBreak
-                    | Inline::Math(_, _)
-                    | Inline::Note(_) => (),
+                    | Inline::Math(_, _) => (),
+                    Inline::Note(bs) => apply_mipc_to_blocks(bs, mipcs, &Some(TaskType::Side)),
                     Inline::Cite(_, _ins) => todo!(),
                     Inline::Span(_, ins)
                     | Inline::Link(_, ins, _)
@@ -84,16 +93,16 @@ fn apply_mipc_to_blocks(bs_ref: &mut Vec<Block>, mipc_iter: &mut IntoIter<String
                     | Inline::Superscript(ins)
                     | Inline::Subscript(ins)
                     | Inline::SmallCaps(ins)
-                    | Inline::Quoted(_, ins) => strings_to_inlines(ins, str_iter),
+                    | Inline::Quoted(_, ins) => strings_to_inlines(ins, mipcs, str_iter, mode),
                 });
             }
 
-            strings_to_inlines(ins, &mut strings.into_iter());
+            strings_to_inlines(ins, mipcs, &mut strings.into_iter(), mode);
         }
         Block::LineBlock(_inss) => todo!(),
         Block::CodeBlock(_, _) => (),
         Block::RawBlock(_format, _text) => (),
-        Block::BlockQuote(bs) | Block::Div(_, bs) => apply_mipc_to_blocks(bs, mipc_iter),
+        Block::BlockQuote(bs) | Block::Div(_, bs) => apply_mipc_to_blocks(bs, mipcs, mode),
         Block::OrderedList(_, _bss) => todo!(),
         Block::BulletList(_bss) => todo!(),
         Block::DefinitionList(_terms) => todo!(),
@@ -120,21 +129,23 @@ fn clean_space(bs: &mut Vec<Block>) {
                         | Inline::Subscript(ins)
                         | Inline::SmallCaps(ins)
                         | Inline::Quoted(_, ins) => clean_space_inlines(ins),
+                        Inline::Note(bs) => clean_space(bs),
                         _ => (),
                     };
                 });
                 *ins = ins
                     .iter()
-                    .fold(vec![], |accs: Vec<Inline>, inline: &Inline| {
+                    .fold(vec![], |mut accs: Vec<Inline>, inline: &Inline| {
                         match (accs.last(), inline) {
                             (None, _) => vec![inline.clone()],
                             (Some(Inline::Str(str1)), Inline::Str(str2)) => {
-                                let mut new_accs = accs.clone();
-                                *new_accs.last_mut().unwrap() =
-                                    Inline::Str(format!("{str1}{str2}"));
-                                new_accs
+                                *accs.last_mut().unwrap() = Inline::Str(format!("{str1}{str2}"));
+                                accs
                             }
-                            _ => accs.to_vec(),
+                            _ => {
+                                accs.push(inline.clone());
+                                accs
+                            }
                         }
                     })
             }
@@ -174,6 +185,7 @@ impl AST for PandocAST {
         self.ast = ast.blocks;
 
         clean_space(&mut self.ast);
+        // println!("{:#?}", self.ast);
 
         Ok(())
     }
@@ -196,14 +208,14 @@ impl AST for PandocAST {
         Ok(())
     }
 
-    fn to_mipcs(&self) -> Vec<String> {
-        collect_ins(&self.ast)
+    fn to_mipcs(&self) -> Tasks {
+        let mut tasks = Tasks::new();
+        collect_ins(&self.ast, &mut tasks, &None);
+        tasks
     }
 
-    fn apply_mipcs(&mut self, mipcs: Vec<String>) -> Result<()> {
-        let mut mipc_iter = mipcs.into_iter();
-
-        apply_mipc_to_blocks(&mut self.ast, &mut mipc_iter);
+    fn apply_mipcs(&mut self, mut mipcs: Tasks) -> Result<()> {
+        apply_mipc_to_blocks(&mut self.ast, &mut mipcs, &None);
         Ok(())
     }
 }

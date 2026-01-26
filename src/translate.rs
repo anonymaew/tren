@@ -1,4 +1,4 @@
-use crate::chunk::TOK_SEP;
+use crate::chunk::{TOK_SEP, Tasks};
 use crate::cli::Args;
 use anyhow::{Result, anyhow};
 use async_openai::{
@@ -56,23 +56,21 @@ async fn chat(client: &Client<OpenAIConfig>, args: &Args, user_prompt: &String) 
 {}
 ",
             if let Some(ref tokens) = usage {
-                format!("({} tokens) ", tokens.prompt_tokens)
+                format!("{} tokens", tokens.prompt_tokens)
             } else {
                 "".to_string()
             },
             user_prompt,
-            vec![
+            {
+                let mut res: Vec<String> = vec![];
                 if let Some(ref tokens) = usage {
-                    format!("{} tokens", tokens.completion_tokens)
-                } else {
-                    "".to_string()
-                },
+                    res.push(format!("{} tokens", tokens.completion_tokens));
+                }
                 if attempts > 1 {
-                    format!("{attempts} attempts")
-                } else {
-                    "".to_string()
-                },
-            ]
+                    res.push(format!("{attempts} attempts"));
+                }
+                res
+            }
             .join(", "),
             answer
         );
@@ -81,7 +79,7 @@ async fn chat(client: &Client<OpenAIConfig>, args: &Args, user_prompt: &String) 
     }
 }
 
-pub async fn task(src: Vec<String>, args: &Args) -> Result<Vec<String>> {
+pub async fn task(src: Tasks, args: &Args) -> Result<Tasks> {
     let client = Client::<OpenAIConfig>::with_config(
         OpenAIConfig::default().with_api_base(
             std::env::var_os("OPENAI_API_BASE")
@@ -91,21 +89,27 @@ pub async fn task(src: Vec<String>, args: &Args) -> Result<Vec<String>> {
         ),
     );
 
-    let mut processings = stream::iter(src)
-        .enumerate()
-        .map(|(i, mipc)| {
-            let client = client.clone();
-            async move { (i, chat(&client, &args, &mipc).await) }
-        })
-        .buffer_unordered(args.parallel)
-        .collect::<Vec<_>>()
-        .await;
+    let task_stream = async |src: Vec<String>| -> Result<Vec<String>> {
+        let mut processings = stream::iter(src)
+            .enumerate()
+            .map(|(i, mipc)| {
+                let client = client.clone();
+                async move { (i, chat(&client, &args, &mipc).await) }
+            })
+            .buffer_unordered(args.parallel)
+            .collect::<Vec<_>>()
+            .await;
+        processings.sort_by_key(|item| item.0);
+        processings
+            .into_iter()
+            .map(|item| item.1)
+            .collect::<Result<Vec<_>>>()
+    };
 
-    processings.sort_by_key(|item| item.0);
-    let results = processings
-        .into_iter()
-        .map(|item| item.1)
-        .collect::<Result<Vec<_>>>()?;
+    let result = Tasks {
+        main: task_stream(src.main.into()).await?.into(),
+        sides: task_stream(src.sides.into()).await?.into(),
+    };
 
-    Ok(results)
+    Ok(result)
 }
