@@ -31,17 +31,10 @@
 
 ## Installation
 
-<!-- TODO: when published, add ways to install -->
-
-### Build manually
+Make sure you already have [Cargo](https://doc.rust-lang.org/stable/cargo/) installed.
 
 ```bash
-# Clone the repository
-git clone https://git.napatsc.com/ns/tren.git
-cd tren
-
-# Build in release mode
-cargo build --release
+cargo install --git https://git.napatsc.com/ns/tren
 ```
 
 ## Usage
@@ -64,7 +57,7 @@ Then, call the program:
 ```bash
 tren --src English \
     --tar Spanish \
-    --i some-document.md
+    -i some-document.md
 ```
 
 Here are available CLI arguments:
