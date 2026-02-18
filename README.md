@@ -11,6 +11,8 @@
 - [Installation](#installation)
   - [Build manually](#build-manually)
 - [Usage](#usage)
+  - [Web interface](#web-interface)
+  - [Command line](#command-line)
   - [Custom prompts](#custom-prompts)
 - [Testing](#testing)
 - [Contributing](#contributing)
@@ -39,6 +41,12 @@ cargo install --git https://git.napatsc.com/ns/tren
 
 ## Usage
 
+### Web interface
+
+unfinished; in the process of implementing
+
+### Command line
+
 First, make sure you set up your environment variables: be creating a `.env` file or export the variables in your shell:
 
 ```bash
@@ -55,7 +63,7 @@ OPENAI_API_BASE="https://api.openai.com/v1"
 Then, call the program:
 
 ```bash
-tren --src English \
+tren run --src English \
     --tar Spanish \
     -i some-document.md
 ```

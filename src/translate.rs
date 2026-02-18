@@ -1,5 +1,5 @@
 use crate::chunk::{TOK_SEP, TaskType, Tasks};
-use crate::cli::Args;
+use crate::cli::Job;
 use anyhow::{Result, anyhow};
 use async_openai::{
     Client,
@@ -12,7 +12,7 @@ use async_openai::{
 use futures::{StreamExt, stream};
 use minijinja::render;
 
-async fn chat(client: &Client<OpenAIConfig>, args: Args, payload: String) -> Result<String> {
+async fn chat(client: &Client<OpenAIConfig>, job: Job, payload: String) -> Result<String> {
     // simple case
     if payload.trim().len() == 0 {
         return Ok(payload.clone());
@@ -21,10 +21,10 @@ async fn chat(client: &Client<OpenAIConfig>, args: Args, payload: String) -> Res
     let mut attempts = 1u8;
     loop {
         let request = CreateChatCompletionRequestArgs::default()
-            .model(args.model.clone())
+            .model(job.llm.model.clone())
             .messages(vec![
-                ChatCompletionRequestSystemMessage::from(args.system.clone()).into(),
-                ChatCompletionRequestUserMessage::from(args.user.clone()).into(),
+                ChatCompletionRequestSystemMessage::from(job.system.clone()).into(),
+                ChatCompletionRequestUserMessage::from(job.user.clone()).into(),
             ])
             .n(1)
             .build()?;
@@ -80,20 +80,22 @@ async fn chat(client: &Client<OpenAIConfig>, args: Args, payload: String) -> Res
     }
 }
 
-pub async fn task(src: Tasks, args: &Args) -> Result<Tasks> {
+use crate::chunk::{AST, pandoc_ast::PandocAST};
+
+pub async fn process_job(job: &Job) -> Result<()> {
+    let mut ast = PandocAST::default();
+    ast.import(&job.input)?;
+
+    let micps = ast.to_mipcs();
+
     let client = Client::<OpenAIConfig>::with_config(
-        OpenAIConfig::default().with_api_base(
-            std::env::var_os("OPENAI_API_BASE")
-                .unwrap_or("https://api.openai.com/v1".into())
-                .into_string()
-                .unwrap(),
-        ),
+        OpenAIConfig::default().with_api_base(job.llm.url.clone()),
     );
 
     let special_tokens = vec!["𐑣"];
 
     let task_stream = async |src: Vec<String>, task_type: TaskType| -> Result<Vec<String>> {
-        let parallel = args.parallel;
+        let parallel = job.parallel;
         let mut processings = stream::iter(src.clone())
             .enumerate()
             .map(|(i, mipc)| {
@@ -103,12 +105,12 @@ pub async fn task(src: Tasks, args: &Args) -> Result<Tasks> {
                     TaskType::Side => 0,
                 };
                 let previous_chunks = &src[i.saturating_sub(back_chunks)..i];
-                let mut new_args = args.clone();
-                new_args.system = render!(&args.system,
-                    source_language => args.src,
-                    target_language => args.tar,
+                let mut new_args = job.clone();
+                new_args.system = render!(&job.system,
+                    source_language => job.src,
+                    target_language => job.tar,
                     special_tokens => special_tokens);
-                new_args.user = render!(&args.user,
+                new_args.user = render!(&job.user,
                     previous_chunks => previous_chunks,
                     source_text => mipc);
                 async move { (i, chat(&client, new_args.clone(), mipc).await) }
@@ -124,13 +126,17 @@ pub async fn task(src: Tasks, args: &Args) -> Result<Tasks> {
     };
 
     let result = Tasks {
-        main: task_stream.clone()(src.main.into(), TaskType::Main)
+        main: task_stream.clone()(micps.main.into(), TaskType::Main)
             .await?
             .into(),
-        sides: task_stream.clone()(src.sides.into(), TaskType::Side)
+        sides: task_stream.clone()(micps.sides.into(), TaskType::Side)
             .await?
             .into(),
     };
 
-    Ok(result)
+    ast.apply_mipcs(result)?;
+
+    ast.export(&job.output)?;
+
+    Ok(())
 }

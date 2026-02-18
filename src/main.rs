@@ -1,23 +1,25 @@
 mod chunk;
 mod cli;
 mod translate;
-use crate::chunk::{AST, pandoc_ast::PandocAST};
-use crate::cli::get_args;
-use crate::translate::task;
+use crate::cli::{CLI, CLIMode, transform_job_cli};
+use crate::translate::process_job;
 use anyhow::Result;
+use clap::Parser;
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    let args = get_args();
+    dotenv::dotenv().ok();
+    let cli_val = CLI::parse();
 
-    let mut ast = PandocAST::default();
-    ast.import(&args.input)?;
-
-    let micps = ast.to_mipcs();
-    let modified_mipcs = task(micps, &args).await?;
-    ast.apply_mipcs(modified_mipcs.clone())?;
-
-    ast.export(&args.output)?;
+    match cli_val.mode {
+        CLIMode::Run(job_cli) => {
+            let job = transform_job_cli(job_cli);
+            process_job(&job).await?;
+        }
+        CLIMode::Web(web_cli) => {
+            todo!()
+        }
+    }
 
     Ok(())
 }
