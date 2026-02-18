@@ -2,3 +2,22 @@
 .direnv
 .DS_Store
 
+webui/node_modules
+
+# Output
+webui/.output
+webui/.vercel
+webui/.netlify
+webui/.wrangler
+webui/.svelte-kit
+webui/build
+
+# Env
+.env
+.env.*
+!.env.example
+!.env.test
+
+# Vite
+webui/vite.config.js.timestamp-*
+webui/vite.config.ts.timestamp-*
