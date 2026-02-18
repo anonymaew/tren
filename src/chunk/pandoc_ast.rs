@@ -47,7 +47,7 @@ fn collect_ins(bs: &Vec<Block>, tasks: &mut Tasks, mode: &Option<TaskType>) {
         Block::RawBlock(_format, _text) => (),
         Block::BlockQuote(bs) | Block::Div(_, bs) => collect_ins(bs, tasks, mode),
         Block::OrderedList(_, _bss) => todo!(),
-        Block::BulletList(_bss) => todo!(),
+        Block::BulletList(bss) => bss.iter().for_each(|bs| collect_ins(bs, tasks, mode)),
         Block::DefinitionList(_terms) => todo!(),
         Block::HorizontalRule | Block::Null => (),
         Block::Table(_) => todo!(),
@@ -104,7 +104,9 @@ fn apply_mipc_to_blocks(bs_ref: &mut Vec<Block>, mipcs: &mut Tasks, mode: &Optio
         Block::RawBlock(_format, _text) => (),
         Block::BlockQuote(bs) | Block::Div(_, bs) => apply_mipc_to_blocks(bs, mipcs, mode),
         Block::OrderedList(_, _bss) => todo!(),
-        Block::BulletList(_bss) => todo!(),
+        Block::BulletList(bss) => bss
+            .iter_mut()
+            .for_each(|bs| apply_mipc_to_blocks(bs, mipcs, mode)),
         Block::DefinitionList(_terms) => todo!(),
         Block::HorizontalRule | Block::Null => (),
         Block::Table(_) => todo!(),
@@ -156,7 +158,7 @@ fn clean_space(bs: &mut Vec<Block>) {
         Block::RawBlock(_format, _text) => (),
         Block::BlockQuote(bs) | Block::Div(_, bs) => clean_space(bs),
         Block::OrderedList(_, _bss) => todo!(),
-        Block::BulletList(_bss) => todo!(),
+        Block::BulletList(bss) => bss.iter_mut().map(clean_space).collect(),
         Block::DefinitionList(_terms) => todo!(),
         Block::HorizontalRule | Block::Null => (),
         Block::Table(_) => todo!(),
